@@ -115,6 +115,20 @@ type Pitcher = {
 type HitterSort = keyof Hitter;
 type PitcherSort = keyof Pitcher;
 
+const hitterHeaders: Array<[string, HitterSort]> = [
+  ["Player", "name"], ["G", "games"], ["PA", "pa"], ["AB", "ab"], ["R", "runs"],
+  ["H", "hits"], ["2B", "doubles"], ["3B", "triples"], ["HR", "homeRuns"], ["RBI", "rbi"],
+  ["BB", "walks"], ["HBP", "hbp"], ["SO", "strikeouts"], ["SB", "stolenBases"], ["CS", "caughtStealing"],
+  ["AVG", "avg"], ["OBP", "obp"], ["SLG", "slg"], ["OPS", "ops"], ["QAB%", "qabPct"], ["P/PA", "pitchesPerPA"],
+];
+
+const pitcherHeaders: Array<[string, PitcherSort]> = [
+  ["Player", "name"], ["App", "appearances"], ["IP", "innings"], ["W", "wins"], ["L", "losses"], ["SV", "saves"],
+  ["H", "hits"], ["R", "runs"], ["ER", "earnedRuns"], ["BB", "walks"], ["K", "strikeouts"], ["HBP", "hbp"],
+  ["WP", "wildPitches"], ["ERA (7)", "era"], ["WHIP", "whip"], ["K/BB", "kbb"], ["K%", "kPct"], ["BB%", "bbPct"],
+  ["BB/IP", "walksPerInning"], ["K/IP", "strikeoutsPerInning"],
+];
+
 const n = (value: number | null | undefined) => Number(value ?? 0);
 const num = (value: number | string | null | undefined) => {
   const parsed = Number(value ?? 0);
@@ -128,11 +142,12 @@ const pct = (value: number) => (Number.isFinite(value) ? `${(value * 100).toFixe
 function Nav() {
   return (
     <nav className="flex flex-wrap rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
+      <a href="/stats" className="rounded-lg bg-slate-800 px-4 py-2 font-semibold text-white">Season Stats</a>
     </nav>
   );
 }
 
-function TopThreeCard({
+function TopFiveCard({
   label,
   leaders,
 }: {
@@ -143,7 +158,7 @@ function TopThreeCard({
     <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
       <div className="text-[11px] font-bold uppercase tracking-widest text-slate-500">{label}</div>
       <div className="mt-3 space-y-3">
-        {leaders.slice(0, 3).map((leader, index) => (
+        {leaders.slice(0, 5).map((leader, index) => (
           <div key={`${label}-${leader.name}-${index}`} className="flex items-start gap-3">
             <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black ${
               index === 0 ? "bg-emerald-400 text-slate-950" : "bg-slate-800 text-slate-300"
@@ -230,7 +245,7 @@ export default function SeasonStatsPage() {
       playerId: player.id, name: player.name, number: player.number, appearances: rows.length, innings,
       wins: sum("wins"), losses: sum("losses"), saves: sum("saves"), wildPitches: sum("wild_pitches"), hits, runs: sum("runs_allowed"),
       earnedRuns, walks, strikeouts, hbp: sum("hbp"), battersFaced: bf,
-      era: innings ? earnedRuns * 9 / innings : 0, whip: innings ? (walks + hits) / innings : 0,
+      era: innings ? earnedRuns * 7 / innings : 0, whip: innings ? (walks + hits) / innings : 0,
       kbb: walks ? strikeouts / walks : strikeouts, kPct: bf ? strikeouts / bf : 0, bbPct: bf ? walks / bf : 0,
       walksPerInning: innings ? walks / innings : 0,
       strikeoutsPerInning: innings ? strikeouts / innings : 0,
@@ -262,7 +277,7 @@ export default function SeasonStatsPage() {
   const topHitters = (key: keyof Hitter, qualified = false) =>
     [...(qualified ? qualifiedHitters : hitters)]
       .sort((a, b) => Number(b[key]) - Number(a[key]))
-      .slice(0, 3);
+      .slice(0, 5);
 
   const topPitchers = (key: keyof Pitcher, qualified = false, lowerIsBetter = false) =>
     [...(qualified ? qualifiedPitchers : pitchers)]
@@ -271,7 +286,7 @@ export default function SeasonStatsPage() {
           ? Number(a[key]) - Number(b[key])
           : Number(b[key]) - Number(a[key])
       )
-      .slice(0, 3);
+      .slice(0, 5);
 
   // Curated inherited-runner history from the private pitching tool.
   // This page exposes only the underlying results, not the optimizer score.
@@ -289,7 +304,7 @@ export default function SeasonStatsPage() {
       b.stranded - a.stranded ||
       b.inherited - a.inherited
     )
-    .slice(0, 3);
+    .slice(0, 5);
 
   const wins = games.filter(g => g.result === "W").length;
   const losses = games.filter(g => g.result === "L").length;
@@ -301,20 +316,110 @@ export default function SeasonStatsPage() {
   const teamAVG = teamAB ? teamH/teamAB : 0;
   const teamOBP = teamPA ? (teamH+teamBB+teamHBP)/teamPA : 0;
 
-  const hitterHeaders: [string,HitterSort][] = [
-    ["Player","name"],["G","games"],["PA","pa"],["AB","ab"],["R","runs"],["H","hits"],["2B","doubles"],
-    ["3B","triples"],["HR","homeRuns"],["RBI","rbi"],["BB","walks"],["HBP","hbp"],["SO","strikeouts"],
-    ["SB","stolenBases"],["CS","caughtStealing"],["AVG","avg"],["OBP","obp"],["SLG","slg"],["OPS","ops"],
-    ["QAB%","qabPct"],["P/PA","pitchesPerPA"]
-  ];
-  const pitcherHeaders: [string,PitcherSort][] = [
-    ["Pitcher","name"],["APP","appearances"],["IP","innings"],["W","wins"],["L","losses"],["SV","saves"],
-    ["H","hits"],["R","runs"],["ER","earnedRuns"],["BB","walks"],["K","strikeouts"],["HBP","hbp"],
-    ["ERA","era"],["WHIP","whip"],["K/BB","kbb"],["K%","kPct"],["BB%","bbPct"]
-  ];
+  // Iron Horse Estimated WAR
+  //
+  // This is a transparent team-specific estimate, not FanGraphs/Baseball-Reference WAR.
+  // We calculate offensive production with linear weights, then compare it with a
+  // replacement-level baseline rather than the average Iron Horse hitter.
+  //
+  // Hitting replacement level is calibrated from the uploaded STLMSBL league data.
+  // We use the 20th percentile of weighted runs/PA among hitters with at least 20 PA:
+  // 0.3043 weighted runs per PA. This anchors Batting RAR to the league
+  // rather than to Iron Horse's own offense.
+  //
+  // Pitching is evaluated in the team's 7-inning environment using earned runs per inning. It uses the same idea: team-average run prevention plus a replacement
+  // allowance of 0.20 runs per inning. Baserunning is valued separately.
+  //
+  // 10 runs = approximately 1 win for this estimate.
+  const warRows = useMemo(() => {
+    const hitterById = new Map(hitters.map(h => [h.playerId, h]));
+    const pitcherById = new Map(pitchers.map(p => [p.playerId, p]));
+    const ids = new Set([...hitterById.keys(), ...pitcherById.keys()]);
 
-  if (loading) return <main className="min-h-screen bg-slate-950 p-8 text-white">Loading 2026 season stats...</main>;
-  if (error) return <main className="min-h-screen bg-slate-950 p-8 text-white"><h1 className="text-3xl font-bold">2026 Season Stats</h1><p className="mt-6 text-red-400">{error}</p></main>;
+    // Linear-weight batting production.
+    const battingRunValue = (h: Hitter) => {
+      const singles = Math.max(h.hits - h.doubles - h.triples - h.homeRuns, 0);
+      return (
+        0.69 * h.walks +
+        0.72 * h.hbp +
+        0.89 * singles +
+        1.27 * h.doubles +
+        1.62 * h.triples +
+        2.10 * h.homeRuns
+      );
+    };
+
+    // League-calibrated replacement level from the uploaded STLMSBL dataset.
+    // Dataset: 190 players who appeared in at least 5 games.
+    // To reduce tiny-sample noise, the replacement pool uses the 116 hitters
+    // with at least 20 PA. The 20th percentile of their weighted batting
+    // production is 0.3043 runs per PA.
+    //
+    // IMPORTANT: This is intentionally a fixed LEAGUE baseline. It is NOT
+    // calculated from Iron Horse's hitters.
+    const replacementRunsPerPA = 0.3043;
+
+    const totalPitchingIP = pitchers.reduce((sum, p) => sum + p.innings, 0);
+    const totalPitchingER = pitchers.reduce((sum, p) => sum + p.earnedRuns, 0);
+    const teamERPerInning = totalPitchingIP ? totalPitchingER / totalPitchingIP : 0;
+
+    // Replacement pitcher is allowed 0.20 additional earned runs per inning
+    // versus the team's average pitcher.
+    const replacementERPerInning = teamERPerInning + 0.20;
+
+    const RUNS_PER_WIN = 10;
+
+    return [...ids]
+      .map(playerId => {
+        const h = hitterById.get(playerId);
+        const p = pitcherById.get(playerId);
+
+        let battingRunsAboveReplacement = 0;
+        let baserunningRuns = 0;
+        let pitchingRunsAboveReplacement = 0;
+
+        if (h && h.pa > 0) {
+          const playerWeightedRuns = battingRunValue(h);
+          const replacementWeightedRuns = replacementRunsPerPA * h.pa;
+
+          // Positive means the player's batting production exceeded what a
+          // replacement hitter would be expected to produce in the same PA.
+          battingRunsAboveReplacement =
+            playerWeightedRuns - replacementWeightedRuns;
+
+          // Approximate run values for steals/caught stealing.
+          baserunningRuns =
+            0.20 * h.stolenBases -
+            0.40 * h.caughtStealing;
+        }
+
+        if (p && p.innings > 0) {
+          const replacementER = replacementERPerInning * p.innings;
+
+          // Runs prevented versus a replacement pitcher over the same innings.
+          pitchingRunsAboveReplacement =
+            replacementER - p.earnedRuns;
+        }
+
+        const totalRunsAboveReplacement =
+          battingRunsAboveReplacement +
+          baserunningRuns +
+          pitchingRunsAboveReplacement;
+
+        const player = players.find(x => x.id === playerId);
+
+        return {
+          playerId,
+          name: player?.name ?? `Player ${playerId}`,
+          battingRunsAboveReplacement,
+          baserunningRuns,
+          pitchingRunsAboveReplacement,
+          totalRunsAboveReplacement,
+          war: totalRunsAboveReplacement / RUNS_PER_WIN,
+        };
+      })
+      .sort((a, b) => b.war - a.war);
+  }, [hitters, pitchers, players]);
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100">
@@ -335,7 +440,7 @@ export default function SeasonStatsPage() {
         <section className="mt-8">
           <div className="text-xs font-bold uppercase tracking-widest text-emerald-400">Team leaders</div>
           <h2 className="mt-1 text-2xl font-black">Batting Leaders</h2>
-          <p className="mt-1 text-sm text-slate-500">Top three in each category. Rate-stat leaders require 20 plate appearances.</p>
+          <p className="mt-1 text-sm text-slate-500">Top five in each category. Rate-stat leaders require 20 plate appearances.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[
               ["AVG", topHitters("avg", true), (h: Hitter) => dec(h.avg)],
@@ -352,7 +457,7 @@ export default function SeasonStatsPage() {
               ["Strikeouts", topHitters("strikeouts"), (h: Hitter) => String(h.strikeouts)],
               ["QAB%", topHitters("qabPct", true), (h: Hitter) => pct(h.qabPct)],
             ].map(([label, leaders, format]: any) => (
-              <TopThreeCard
+              <TopFiveCard
                 key={label}
                 label={label}
                 leaders={(leaders as Hitter[]).map(h => ({ name: h.name, value: format(h) }))}
@@ -364,10 +469,10 @@ export default function SeasonStatsPage() {
         <section className="mt-8">
           <div className="text-xs font-bold uppercase tracking-widest text-sky-400">Team leaders</div>
           <h2 className="mt-1 text-2xl font-black">Pitching Leaders</h2>
-          <p className="mt-1 text-sm text-slate-500">Top three in each category. ERA, WHIP, K% and K/BB require 10 innings pitched.</p>
+          <p className="mt-1 text-sm text-slate-500">Top five in each category. ERA is calculated per 7 innings. ERA, WHIP, K% and K/BB require 10 innings pitched.</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {[
-              ["ERA", topPitchers("era", true, true), (p: Pitcher) => dec2(p.era)],
+              ["ERA (7)", topPitchers("era", true, true), (p: Pitcher) => dec2(p.era)],
               ["WHIP", topPitchers("whip", true, true), (p: Pitcher) => dec2(p.whip)],
               ["Strikeouts", topPitchers("strikeouts"), (p: Pitcher) => String(p.strikeouts)],
               ["K%", topPitchers("kPct", true), (p: Pitcher) => pct(p.kPct)],
@@ -380,7 +485,7 @@ export default function SeasonStatsPage() {
               ["K / Inning", topPitchers("strikeoutsPerInning", true), (p: Pitcher) => dec2(p.strikeoutsPerInning)],
               ["Wild Pitches", topPitchers("wildPitches"), (p: Pitcher) => String(p.wildPitches)],
             ].map(([label, leaders, format]: any) => (
-              <TopThreeCard
+              <TopFiveCard
                 key={label}
                 label={label}
                 leaders={(leaders as Pitcher[]).map(p => ({ name: p.name, value: format(p) }))}
@@ -451,10 +556,80 @@ export default function SeasonStatsPage() {
               <tbody>{sortedPitchers.map(p => <tr key={p.playerId} className="border-b border-slate-800/70 hover:bg-slate-800/30">
                 <td className="whitespace-nowrap px-3 py-3 font-semibold text-white">{p.number?`#${p.number} `:""}{p.name}</td>
                 <td className="px-3 py-3">{p.appearances}</td><td className="px-3 py-3">{dec2(p.innings)}</td><td className="px-3 py-3">{p.wins}</td><td className="px-3 py-3">{p.losses}</td><td className="px-3 py-3">{p.saves}</td>
-                <td className="px-3 py-3">{p.hits}</td><td className="px-3 py-3">{p.runs}</td><td className="px-3 py-3">{p.earnedRuns}</td><td className="px-3 py-3">{p.walks}</td><td className="px-3 py-3">{p.strikeouts}</td><td className="px-3 py-3">{p.hbp}</td>
-                <td className="px-3 py-3">{dec2(p.era)}</td><td className="px-3 py-3">{dec2(p.whip)}</td><td className="px-3 py-3">{dec2(p.kbb)}</td><td className="px-3 py-3">{pct(p.kPct)}</td><td className="px-3 py-3">{pct(p.bbPct)}</td>
+                <td className="px-3 py-3">{p.hits}</td><td className="px-3 py-3">{p.runs}</td><td className="px-3 py-3">{p.earnedRuns}</td><td className="px-3 py-3">{p.walks}</td><td className="px-3 py-3">{p.strikeouts}</td><td className="px-3 py-3">{p.hbp}</td><td className="px-3 py-3">{p.wildPitches}</td>
+                <td className="px-3 py-3">{dec2(p.era)}</td><td className="px-3 py-3">{dec2(p.whip)}</td><td className="px-3 py-3">{dec2(p.kbb)}</td><td className="px-3 py-3">{pct(p.kPct)}</td><td className="px-3 py-3">{pct(p.bbPct)}</td><td className="px-3 py-3">{dec2(p.walksPerInning)}</td><td className="px-3 py-3">{dec2(p.strikeoutsPerInning)}</td>
               </tr>)}</tbody>
             </table>
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-violet-500/30 bg-slate-900 p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-widest text-violet-400">Experimental · Replacement-Level Model</div>
+              <h2 className="mt-1 text-2xl font-black">Estimated WAR — Every Player</h2>
+            </div>
+            <div className="text-xs text-slate-500">Sorted highest to lowest</div>
+          </div>
+
+          <p className="mt-2 max-w-5xl text-sm text-slate-400">
+            This Iron Horse estimate measures value above a league-calibrated replacement-level player, not value above the average Iron Horse player.
+            Batting uses linear run values for BB, HBP, singles, doubles, triples and home runs; baserunning credits steals and penalizes
+            caught stealing; pitching measures earned runs prevented versus a replacement pitcher in the team's 7-inning environment. Two-way players receive both batting
+            and pitching value.
+          </p>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Hitting replacement level</div>
+              <div className="mt-1 text-sm text-slate-300">STLMSBL 20th percentile among hitters with 20+ PA (0.3043 weighted runs/PA)</div>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Pitching replacement level</div>
+              <div className="mt-1 text-sm text-slate-300">Team-average ER rate + 0.20 runs allowed per inning</div>
+            </div>
+            <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4">
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Runs → Wins</div>
+              <div className="mt-1 text-sm text-slate-300">10 runs above replacement ≈ 1 estimated win</div>
+            </div>
+          </div>
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="min-w-[950px] w-full text-left text-sm">
+              <thead className="border-b border-slate-700 text-xs uppercase tracking-wider text-slate-500">
+                <tr>
+                  <th className="px-3 py-3">Rank</th>
+                  <th className="px-3 py-3">Player</th>
+                  <th className="px-3 py-3">Batting RAR</th>
+                  <th className="px-3 py-3">Baserunning Runs</th>
+                  <th className="px-3 py-3">Pitching RAR</th>
+                  <th className="px-3 py-3">Total RAR</th>
+                  <th className="px-3 py-3">Est. WAR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {warRows.map((row, index) => (
+                  <tr key={row.playerId} className="border-b border-slate-800/70 hover:bg-slate-800/30">
+                    <td className="px-3 py-3 font-bold text-slate-500">{index + 1}</td>
+                    <td className="px-3 py-3 font-semibold text-white">{row.name}</td>
+                    <td className="px-3 py-3">{row.battingRunsAboveReplacement.toFixed(1)}</td>
+                    <td className="px-3 py-3">{row.baserunningRuns.toFixed(1)}</td>
+                    <td className="px-3 py-3">{row.pitchingRunsAboveReplacement.toFixed(1)}</td>
+                    <td className="px-3 py-3 font-bold">{row.totalRunsAboveReplacement.toFixed(1)}</td>
+                    <td className="px-3 py-3 text-lg font-black text-violet-300">{row.war.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-xs leading-5 text-slate-500">
+            <strong className="text-slate-300">What RAR means:</strong> Runs Above Replacement. A positive Batting RAR means the hitter
+            produced more estimated offensive value than a replacement-level hitter would have produced in the same number of plate
+            appearances. Hitting replacement level is anchored to the 20th percentile of weighted batting production among the 116
+            STLMSBL hitters in the supplied league file with at least 20 PA (0.304 weighted runs/PA). The 20-PA cutoff reduces
+            tiny-sample distortion. This is a league-calibrated estimate and is not directly comparable with MLB WAR. Defense and positional
+            adjustments are excluded because the current database does not contain enough reliable defensive data.
           </div>
         </section>
       </div>
